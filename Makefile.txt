@@ -1,0 +1,220 @@
+.PHONY: help install install-dev test test-coverage lint security-scan format clean docker-build docker-run deploy-terraform deploy-lambda package docs
+
+# Variables
+PYTHON := python3
+PIP := pip3
+PROJECT_NAME := cloudtrail-monitor
+DOCKER_IMAGE := $(PROJECT_NAME):latest
+AWS_REGION := us-east-1
+TERRAFORM_DIR := terraform
+
+# Colors for output
+BLUE := \033[0;34m
+GREEN := \033[0;32m
+YELLOW := \033[0;33m
+RED := \033[0;31m
+NC := \033[0m # No Color
+
+help: ## Show this help message
+	@echo "$(BLUE)CloudTrail Security Monitor - Available Commands$(NC)"
+	@echo ""
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(NC) %s\n", $$1, $$2}'
+
+install: ## Install production dependencies
+	@echo "$(BLUE)Installing production dependencies...$(NC)"
+	$(PIP) install -r requirements.txt
+	@echo "$(GREEN)✓ Installation complete$(NC)"
+
+install-dev: ## Install development dependencies
+	@echo "$(BLUE)Installing development dependencies...$(NC)"
+	$(PIP) install -r requirements-dev.txt
+	pre-commit install
+	@echo "$(GREEN)✓ Development setup complete$(NC)"
+
+test: ## Run unit tests
+	@echo "$(BLUE)Running unit tests...$(NC)"
+	pytest tests/unit -v --tb=short
+	@echo "$(GREEN)✓ Tests passed$(NC)"
+
+test-integration: ## Run integration tests
+	@echo "$(BLUE)Running integration tests...$(NC)"
+	pytest tests/integration -v --tb=short
+	@echo "$(GREEN)✓ Integration tests passed$(NC)"
+
+test-coverage: ## Run tests with coverage report
+	@echo "$(BLUE)Running tests with coverage...$(NC)"
+	pytest tests/ --cov=src --cov-report=html --cov-report=term-missing
+	@echo "$(GREEN)✓ Coverage report generated in htmlcov/$(NC)"
+
+lint: ## Run code linting
+	@echo "$(BLUE)Running linters...$(NC)"
+	@echo "  - Checking code style with flake8..."
+	flake8 src/ --max-line-length=100 --exclude=__pycache__
+	@echo "  - Checking code quality with pylint..."
+	pylint src/ --disable=C0111,R0903
+	@echo "  - Checking type hints with mypy..."
+	mypy src/ --ignore-missing-imports
+	@echo "$(GREEN)✓ Linting complete$(NC)"
+
+format: ## Format code with black
+	@echo "$(BLUE)Formatting code with black...$(NC)"
+	black src/ tests/ --line-length=100
+	@echo "$(GREEN)✓ Code formatted$(NC)"
+
+security-scan: ## Run security vulnerability scans
+	@echo "$(BLUE)Running security scans...$(NC)"
+	@echo "  - Scanning code with bandit..."
+	bandit -r src/ -f json -o bandit-report.json || true
+	bandit -r src/ -f screen
+	@echo "  - Checking dependencies with safety..."
+	safety check --json || true
+	@echo "$(GREEN)✓ Security scan complete$(NC)"
+
+clean: ## Clean up generated files
+	@echo "$(BLUE)Cleaning up...$(NC)"
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name '*.pyc' -delete
+	find . -type f -name '*.pyo' -delete
+	find . -type d -name '*.egg-info' -exec rm -rf {} + 2>/dev/null || true
+	rm -rf build/ dist/ .pytest_cache/ .coverage htmlcov/ .mypy_cache/
+	@echo "$(GREEN)✓ Cleanup complete$(NC)"
+
+docker-build: ## Build Docker image
+	@echo "$(BLUE)Building Docker image...$(NC)"
+	docker build -t $(DOCKER_IMAGE) .
+	@echo "$(GREEN)✓ Docker image built: $(DOCKER_IMAGE)$(NC)"
+
+docker-scan: docker-build ## Scan Docker image for vulnerabilities
+	@echo "$(BLUE)Scanning Docker image...$(NC)"
+	trivy image $(DOCKER_IMAGE)
+	@echo "$(GREEN)✓ Docker scan complete$(NC)"
+
+docker-run: ## Run Docker container locally
+	@echo "$(BLUE)Running Docker container...$(NC)"
+	docker run --rm \
+		--env-file .env \
+		-v $(PWD)/config:/app/config:ro \
+		$(DOCKER_IMAGE)
+
+docker-run-interactive: ## Run Docker container interactively
+	@echo "$(BLUE)Running Docker container interactively...$(NC)"
+	docker run --rm -it \
+		--env-file .env \
+		-v $(PWD)/config:/app/config:ro \
+		$(DOCKER_IMAGE) /bin/bash
+
+package: clean ## Package application for deployment
+	@echo "$(BLUE)Packaging application...$(NC)"
+	mkdir -p dist
+	# Package for Lambda
+	cd src && zip -r ../dist/lambda_deployment.zip . -x "*.pyc" -x "__pycache__/*"
+	cd . && zip -j dist/lambda_deployment.zip cloudtrail_monitor.py
+	cd . && zip -r dist/lambda_deployment.zip config/
+	# Add dependencies
+	$(PIP) install -r requirements.txt -t dist/package/
+	cd dist/package && zip -r ../lambda_deployment.zip .
+	@echo "$(GREEN)✓ Lambda package created: dist/lambda_deployment.zip$(NC)"
+
+terraform-init: ## Initialize Terraform
+	@echo "$(BLUE)Initializing Terraform...$(NC)"
+	cd $(TERRAFORM_DIR) && terraform init
+	@echo "$(GREEN)✓ Terraform initialized$(NC)"
+
+terraform-plan: terraform-init ## Plan Terraform deployment
+	@echo "$(BLUE)Planning Terraform deployment...$(NC)"
+	cd $(TERRAFORM_DIR) && terraform plan -out=tfplan
+	@echo "$(GREEN)✓ Terraform plan created$(NC)"
+
+terraform-apply: terraform-plan ## Apply Terraform configuration
+	@echo "$(BLUE)Applying Terraform configuration...$(NC)"
+	@echo "$(YELLOW)⚠ This will create real AWS resources!$(NC)"
+	@read -p "Continue? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		cd $(TERRAFORM_DIR) && terraform apply tfplan; \
+		echo "$(GREEN)✓ Terraform applied$(NC)"; \
+	else \
+		echo "$(YELLOW)Deployment cancelled$(NC)"; \
+	fi
+
+terraform-destroy: ## Destroy Terraform resources
+	@echo "$(RED)⚠ WARNING: This will destroy all AWS resources!$(NC)"
+	@read -p "Are you sure? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		cd $(TERRAFORM_DIR) && terraform destroy; \
+		echo "$(GREEN)✓ Resources destroyed$(NC)"; \
+	else \
+		echo "$(YELLOW)Destruction cancelled$(NC)"; \
+	fi
+
+deploy-lambda: package terraform-init ## Deploy Lambda function
+	@echo "$(BLUE)Deploying Lambda function...$(NC)"
+	aws lambda update-function-code \
+		--function-name $(PROJECT_NAME) \
+		--zip-file fileb://dist/lambda_deployment.zip \
+		--region $(AWS_REGION)
+	@echo "$(GREEN)✓ Lambda function deployed$(NC)"
+
+run-local: ## Run monitor locally
+	@echo "$(BLUE)Running CloudTrail monitor locally...$(NC)"
+	$(PYTHON) cloudtrail_monitor.py
+
+run-dev: ## Run monitor in development mode
+	@echo "$(BLUE)Running in development mode...$(NC)"
+	export LOG_LEVEL=DEBUG && $(PYTHON) cloudtrail_monitor.py
+
+validate-config: ## Validate configuration file
+	@echo "$(BLUE)Validating configuration...$(NC)"
+	$(PYTHON) -c "from src.utils.config_loader import ConfigLoader; ConfigLoader('config/config.yaml')"
+	@echo "$(GREEN)✓ Configuration is valid$(NC)"
+
+setup-aws: ## Set up AWS infrastructure
+	@echo "$(BLUE)Setting up AWS infrastructure...$(NC)"
+	@echo "This will create:"
+	@echo "  - CloudTrail (if not exists)"
+	@echo "  - SNS Topic for alerts"
+	@echo "  - DynamoDB table for state"
+	@echo "  - IAM role and policies"
+	@read -p "Continue? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		$(MAKE) terraform-apply; \
+	else \
+		echo "$(YELLOW)Setup cancelled$(NC)"; \
+	fi
+
+check-aws-creds: ## Check AWS credentials
+	@echo "$(BLUE)Checking AWS credentials...$(NC)"
+	@aws sts get-caller-identity && echo "$(GREEN)✓ AWS credentials valid$(NC)" || echo "$(RED)✗ AWS credentials invalid$(NC)"
+
+tail-logs: ## Tail CloudWatch logs
+	@echo "$(BLUE)Tailing CloudWatch logs...$(NC)"
+	aws logs tail /aws/$(PROJECT_NAME) --follow --region $(AWS_REGION)
+
+invoke-lambda: ## Manually invoke Lambda function
+	@echo "$(BLUE)Invoking Lambda function...$(NC)"
+	aws lambda invoke \
+		--function-name $(PROJECT_NAME) \
+		--region $(AWS_REGION) \
+		--log-type Tail \
+		response.json
+	@cat response.json | jq .
+	@rm response.json
+
+pre-commit: lint security-scan test ## Run all pre-commit checks
+	@echo "$(GREEN)✓ All pre-commit checks passed$(NC)"
+
+ci: install-dev lint security-scan test-coverage ## Run CI pipeline
+	@echo "$(GREEN)✓ CI pipeline complete$(NC)"
+
+docs: ## Generate documentation
+	@echo "$(BLUE)Generating documentation...$(NC)"
+	@echo "Creating README..."
+	@echo "# CloudTrail Security Monitor" > README.md
+	@echo "" >> README.md
+	@echo "Automated security monitoring for AWS CloudTrail events." >> README.md
+	@echo "$(GREEN)✓ Documentation generated$(NC)"
+
+all: clean install-dev lint security-scan test-coverage docker-build ## Run all tasks
+	@echo "$(GREEN)✓ All tasks complete$(NC)"

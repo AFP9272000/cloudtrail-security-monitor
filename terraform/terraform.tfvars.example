@@ -1,0 +1,8 @@
+# terraform/terraform.tfvars.example
+
+aws_region          = "us-east-2"
+environment         = "production"
+project_name        = "cloudtrail-monitor"
+alert_email         = "addisonpirlo2@gmail.com"  # change this
+enable_lambda       = true
+schedule_expression = "rate(15 minutes)"

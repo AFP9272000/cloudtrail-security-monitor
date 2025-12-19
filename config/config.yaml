@@ -1,0 +1,204 @@
+# CloudTrail Security Monitor Configuration
+
+# Monitoring settings
+monitoring:
+  # How far back to look for events (in minutes)
+  lookback_minutes: 15
+  
+  # Maximum number of events to retrieve per API call
+  batch_size: 50
+  
+  # Maximum total events to process in one run
+  max_events_per_run: 1000
+  
+  # Regions to monitor (empty means all regions)
+  regions: []
+  
+  # Event sources to monitor (empty means all sources)
+  event_sources: []
+
+# Alert configuration
+alerts:
+  # Cooldown period between duplicate alerts (in minutes)
+  cooldown_minutes: 60
+  
+  # Number of incidents to batch before sending
+  batch_threshold: 5
+  
+  # Enable different alert channels
+  enable_slack: false
+  enable_email: true
+  enable_pagerduty: false
+  
+  # Severity thresholds for different channels
+  slack_min_severity: MEDIUM
+  email_min_severity: HIGH
+  pagerduty_min_severity: CRITICAL
+
+# Security detection rules
+security:
+  # Track failed login attempts
+  track_failed_logins: true
+  failed_login_threshold: 3
+  failed_login_window_minutes: 10
+  
+  # Detect privilege escalation attempts
+  detect_privilege_escalation: true
+  
+  # Detect potential data exfiltration
+  detect_data_exfiltration: true
+  
+  # Detect anomalous API activity
+  detect_anomalies: true
+  
+  # Baseline learning period (days)
+  baseline_learning_period: 7
+  
+  # Monitor specific user actions
+  monitor_root_usage: true
+  monitor_iam_changes: true
+  monitor_network_changes: true
+  monitor_data_access: true
+
+# Performance optimization
+performance:
+  # Enable caching for repeated queries
+  enable_caching: true
+  cache_ttl_seconds: 300
+  
+  # Maximum concurrent API requests
+  max_concurrent_requests: 10
+  
+  # API request timeout (seconds)
+  api_timeout: 30
+  
+  # Retry configuration
+  max_retries: 3
+  retry_backoff_factor: 2
+
+# Logging configuration
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: INFO
+  
+  # Log format: json or text
+  format: json
+  
+  # Enable CloudWatch Logs integration
+  enable_cloudwatch: false
+  
+  # CloudWatch log group
+  cloudwatch_log_group: /aws/cloudtrail-monitor
+  
+  # Log rotation (for file-based logging)
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+
+# Event patterns to monitor
+event_patterns:
+  critical_events:
+    - DeleteTrail
+    - StopLogging
+    - DeleteBucket
+    - ScheduleKeyDeletion
+    - PutBucketPolicy
+    - DeleteVpc
+    
+  high_priority_events:
+    - CreateUser
+    - CreateRole
+    - CreateAccessKey
+    - PutUserPolicy
+    - AttachUserPolicy
+    - AttachRolePolicy
+    - TerminateInstances
+    - DeleteDBInstance
+    - AuthorizeSecurityGroupIngress
+    
+  medium_priority_events:
+    - ModifyVpcAttribute
+    - CreateVpc
+    - DeleteSecurityGroup
+    - RevokeSecurityGroupIngress
+    - UpdateAssumeRolePolicy
+    - CreateNetworkAcl
+    - ModifySubnetAttribute
+
+# Whitelisting (events to ignore)
+whitelist:
+  # Users whose actions should not trigger alerts
+  users: []
+  
+  # IP addresses to whitelist
+  ip_addresses: []
+  
+  # Event names to ignore
+  event_names: []
+  
+  # Service accounts (automation)
+  service_accounts:
+    - terraform
+    - jenkins
+    - github-actions
+
+# Compliance and audit
+compliance:
+  # Enable audit logging
+  enable_audit_log: true
+  
+  # Audit log retention (days)
+  audit_retention_days: 365
+  
+  # Compliance frameworks to check against
+  frameworks:
+    - CIS
+    - NIST
+    - PCI-DSS
+  
+  # Generate compliance reports
+  generate_reports: true
+  report_frequency: weekly
+
+# Integration settings
+integrations:
+  # Slack configuration
+  slack:
+    webhook_url: ${SLACK_WEBHOOK_URL}
+    channel: security-alerts
+    username: CloudTrail Monitor
+    icon_emoji: ":shield:"
+  
+  # PagerDuty configuration
+  pagerduty:
+    api_key: ${PAGERDUTY_API_KEY}
+    service_id: ${PAGERDUTY_SERVICE_ID}
+  
+  # Jira configuration (for ticket creation)
+  jira:
+    enabled: false
+    url: ${JIRA_URL}
+    username: ${JIRA_USERNAME}
+    api_token: ${JIRA_API_TOKEN}
+    project_key: SEC
+
+# Advanced features
+advanced:
+  # Enable machine learning-based anomaly detection
+  enable_ml_detection: false
+  
+  # Enable threat intelligence integration
+  enable_threat_intel: false
+  
+  # Threat intelligence feeds
+  threat_intel_feeds:
+    - alienvault
+    - abuse_ch
+  
+  # Enable automated response actions
+  enable_auto_response: false
+  
+  # Automated responses
+  auto_response_actions:
+    - isolate_user
+    - revoke_credentials
+    - notify_security_team
