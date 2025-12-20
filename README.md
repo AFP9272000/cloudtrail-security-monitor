@@ -224,12 +224,12 @@ This project showcases:
 
 ## ðŸ”— Related Projects
 
-- [OWASP Juice Shop Deployment](https://github.com/YOUR_USERNAME/owasp-juice-shop-aws)
-- [Other DevSecOps Projects](https://github.com/YOUR_USERNAME)
+- [OWASP Juice Shop Deployment]((https://github.com/AFP9272000/secure-vulnerable-website-juiceshop))
+- [Other DevSecOps Projects](https://github.com/AFP9272000)
 
 ## ðŸ“ž Contact
 
-**Addison** - [LinkedIn](https://linkedin.com/in/YOUR_PROFILE) | [Email](mailto:addisonpirlo2@gmail.com)
+**Addison** - [LinkedIn](www.linkedin.com/in/addison-p-6406b225b) | [Email](mailto:addisonpirlo2@gmail.com)
 
 ---
 
